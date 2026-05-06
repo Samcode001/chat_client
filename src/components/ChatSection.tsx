@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "../redux/store";
 import type { Message } from "../types";
@@ -10,7 +10,8 @@ const ChatSection = () => {
   const [isLoading, setIsloading] = useState(false);
   const [cursorId, setCursorId] = useState(null);
 
-  // const messageRef = useRef<Message[]>([]);
+  const cursorRef = useRef<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const focusedConversation = useSelector(
     (state: RootState) => state.conversation.focusedConversation,
@@ -19,14 +20,7 @@ const ChatSection = () => {
   const handleSubmit = async (e: any) => {
     try {
       e.preventDefault();
-      const tempMessage: Message = {
-        id: Date.now().toString(),
-        content: chatInput,
-        createdAt: Date.now().toString(),
-        username: localStorage.getItem("token")!,
-      };
 
-      setMessages((prev) => [...prev, tempMessage]);
       const { data } = await api.post(
         `/chat/conversations/${focusedConversation?.id}/messages`,
         { content: chatInput },
@@ -34,33 +28,50 @@ const ChatSection = () => {
       console.log(data);
 
       setChatInput("");
-      //   getConversationMessages();
     } catch (error) {
       console.log(error);
     }
   };
 
-  // useEffect(() => {
-  //   messageRef.current = messages;
-  //   return () => {
-  //     messageRef.current = [];
-  //   };
-  // }, [messages]);
+  useEffect(() => {
+    cursorRef.current = cursorId;
+  }, [cursorId]);
+
+  //responsible for the auto scroll of the caht section to bottom postion for new messages
+  useEffect(() => {
+    const el = scrollRef.current;
+
+    if (!el) return;
+
+    requestAnimationFrame(() => {
+      const isNearBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+
+      if (isNearBottom)
+        el.scrollTo({
+          top: el.scrollHeight,
+          behavior: "smooth",
+        });
+    });
+  }, [messages]);
 
   useEffect(() => {
     setIsloading(false);
     setMessages([]);
     setCursorId(null);
+    const el = scrollRef.current;
+    if (!el) return;
 
     let isActive = true; // to avoid race condition for api resolving in interval
 
     const getConversationMessages = async () => {
       try {
+        const query = cursorRef.current ? `?cursorId=${cursorRef.current}` : "";
         const { data } = await api.get(
-          `/chat/conversations/${focusedConversation?.id}/messages?${cursorId ? `cursorId=${cursorId}` : ""}`,
+          `/chat/conversations/${focusedConversation?.id}/messages${query}`,
         );
         // console.log(cursorId, data.cursorId);
-        // if (!data) return;
+        if (!data) return;
         // console.log(data);
         if (!isActive) return;
         setCursorId(data.cursorId);
@@ -84,6 +95,10 @@ const ChatSection = () => {
     };
 
     getConversationMessages();
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: "smooth",
+    });
     const interval = setInterval(getConversationMessages, 2500);
 
     return () => {
@@ -108,7 +123,9 @@ const ChatSection = () => {
       >
         <h2>{focusedConversation?.username}</h2>
         <hr />
-
+        <button style={{ margin: "auto", display: "block", cursor: "pointer" }}>
+          Load older mssges.
+        </button>
         <div
           style={{
             display: "flex",
@@ -126,8 +143,10 @@ const ChatSection = () => {
               height: "70vh",
               position: "relative",
               padding: "1rem",
-              overflowY: "scroll",
+              overflowY: "auto",
+              scrollbarWidth: "none",
             }}
+            ref={scrollRef}
           >
             {isLoading
               ? messages.length !== 0
@@ -140,6 +159,7 @@ const ChatSection = () => {
                             ? { textAlign: "left", marginBottom: "1rem" }
                             : { textAlign: "right", marginBottom: "1rem" }
                         }
+                        key={message.id}
                       >
                         <span
                           style={{
@@ -200,3 +220,12 @@ const ChatSection = () => {
 };
 
 export default ChatSection;
+
+// btton cliked -> the cursoref should be hydarted witht the cursorid
+//  -> when new response come ,store the newCursorId, in some toehr ref for late use in laodmore buttn
+/*
+ladMoreMessagesRef.current=dat.cursorId;
+when button cliked ;
+hydrate the cursoRef with the ladMoreMessagesRef;
+
+*/

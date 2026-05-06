@@ -38,10 +38,6 @@ const SideBar = () => {
   };
   useEffect(() => {
     getConversations();
-    // const interval = setInterval(getConversations, 2500);
-    // return () => {
-    //   clearInterval(interval);
-    // };
   }, []);
 
   return (
