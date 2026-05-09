@@ -1,19 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Conversation } from "../types";
 import { useDispatch, useSelector } from "react-redux";
 import {
   setConversations,
   setFocusedConversation,
+  updateConversation,
 } from "../redux/conversationSlice";
 import type { RootState } from "../redux/store";
 import { api } from "../lib/axios";
+import ws from "../lib/socketInitiator";
 
 const SideBar = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
   const [isLoading, setIsLoading] = useState(false);
+  const isJoinedRef = useRef<boolean>(false);
 
   const conversations = useSelector(
     (state: RootState) => state.conversation.conversations,
@@ -25,9 +28,25 @@ const SideBar = () => {
 
       console.log(data);
       if (!data) return;
+      let conversations = data.conversations;
       setIsLoading(true);
-      dispatch(setConversations(data.conversations));
-      //   setConversation(data.conversations);
+      dispatch(setConversations(conversations));
+
+      if (isJoinedRef.current) return;
+      conversations.map((conversation: Conversation) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: "join",
+              payload: {
+                conversationId: conversation.id,
+                username: localStorage.getItem("currentUser"),
+              },
+            }),
+          );
+        }
+      });
+      isJoinedRef.current = true;
     } catch (error) {
       console.log(error);
     }
@@ -36,6 +55,38 @@ const SideBar = () => {
   const handleSelectConversation = async (conversation: Conversation) => {
     dispatch(setFocusedConversation(conversation));
   };
+  useEffect(() => {
+    if (!ws) return;
+
+    console.log("conversations", conversations);
+
+    const handleConnectionOpen = () => {
+      console.log("connected to socket server");
+    };
+
+    const handleSocketError = (error: any) => {
+      console.log("error on socket", error);
+    };
+
+    const handleSocketMessage = (event: MessageEvent) => {
+      const data = JSON.parse(event.data);
+      console.log("sidebar ws data", data, conversations);
+      const conversationId = data.conversationId;
+      dispatch(
+        updateConversation({ id: conversationId, lastMessage: data.content }),
+      );
+    };
+    ws.addEventListener("message", handleSocketMessage);
+    ws.addEventListener("open", handleConnectionOpen);
+    ws.addEventListener("error", handleSocketError);
+
+    return () => {
+      ws.removeEventListener("message", handleSocketMessage);
+      ws.removeEventListener("open", handleConnectionOpen);
+      ws.removeEventListener("error", handleSocketError);
+    };
+  }, [ws]);
+
   useEffect(() => {
     getConversations();
   }, []);
@@ -86,6 +137,7 @@ const SideBar = () => {
               ? conversations.map((conversation) => {
                   return (
                     <div
+                      key={conversation.id}
                       style={{
                         outline: "1px solid gray",
                         padding: " 4px 10px",

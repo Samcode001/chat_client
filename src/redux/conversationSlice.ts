@@ -29,13 +29,29 @@ export const conversationSlice = createSlice({
       state,
       action: PayloadAction<Conversation | null>,
     ) => {
-      console.log("redux", action.payload);
+      // console.log("redux", action.payload);
       state.focusedConversation = action.payload;
+    },
+    updateConversation: (state, action: PayloadAction<any>) => {
+      const index = state.conversations.findIndex(
+        (conversation) => conversation.id === action.payload.id,
+      );
+      // console.log(action.payload, state.conversations[index]);
+
+      state.conversations[index].lastMessage = action.payload.lastMessage;
+
+      let temp = state.conversations[index];
+      state.conversations[index] = state.conversations[0];
+      state.conversations[0] = temp;
     },
   },
 });
 
-export const { addConversation, setFocusedConversation, setConversations } =
-  conversationSlice.actions;
+export const {
+  addConversation,
+  setFocusedConversation,
+  setConversations,
+  updateConversation,
+} = conversationSlice.actions;
 
 export default conversationSlice.reducer;
