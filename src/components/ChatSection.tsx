@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "../redux/store";
-import type { Message } from "../types";
+import type { Cursor, Message } from "../types";
 import { api } from "../lib/axios";
 import ws from "../lib/socketInitiator";
 import { updateConversation } from "../redux/conversationSlice";
@@ -11,8 +11,10 @@ const ChatSection = () => {
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsloading] = useState(false);
   const [cursorId, setCursorId] = useState(null);
+  const [isTypingFlag, setIsTypingFlag] = useState(false);
 
-  const cursorRef = useRef<string | null>(null);
+  const cursorRef = useRef<Cursor>({});
+  const LoadMoreRef = useRef<boolean>(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const dispatch = useDispatch();
@@ -33,8 +35,11 @@ const ChatSection = () => {
       setMessages((prev) => [...prev, tempMessage]);
       dispatch(
         updateConversation({
-          id: focusedConversation?.id,
-          lastMessage: chatInput,
+          type: "messageUpdate",
+          payload: {
+            id: focusedConversation?.id,
+            lastMessage: chatInput,
+          },
         }),
       );
       ws.send(
@@ -46,11 +51,8 @@ const ChatSection = () => {
           },
         }),
       );
-      const { data } = await api.post(
-        `/chat/conversations/${focusedConversation?.id}/messages`,
-        { content: chatInput },
-      );
-      console.log(data);
+
+      // console.log(data);
 
       setChatInput("");
     } catch (error) {
@@ -60,14 +62,16 @@ const ChatSection = () => {
 
   const getConversationMessages = async () => {
     try {
-      const query = cursorRef.current ? `?cursorId=${cursorRef.current}` : "";
+      if (!focusedConversation?.id) return;
+      const conversationId = focusedConversation.id as string;
+      const query =
+        cursorRef.current[conversationId] && LoadMoreRef.current
+          ? `?cursorId=${cursorRef.current[conversationId]}`
+          : "";
       const { data } = await api.get(
-        `/chat/conversations/${focusedConversation?.id}/messages${query}`,
+        `/chat/conversations/${conversationId}/messages${query}`,
       );
-      // console.log(cursorId, data.cursorId);
       if (!data) return;
-      // console.log(data);
-      // if (!isActive) return;
       setCursorId(data.cursorId);
       setIsloading(true);
 
@@ -75,21 +79,41 @@ const ChatSection = () => {
         const newMessages = data.messages;
         const ids = new Set(prev.map((msg) => msg.id));
 
-        const merged = [...prev];
-
-        newMessages.map((msg: Message) => {
-          if (!ids.has(msg.id)) merged.push(msg);
+        // newMessages.filter(msg=>msg.id)
+        const filteredMssgs = newMessages.filter((msg: Message) => {
+          if (!ids.has(msg.id)) return msg;
         });
+        const merged = [...filteredMssgs, ...prev];
 
         return merged;
       });
+      LoadMoreRef.current = false;
     } catch (error) {
       console.log(error);
     }
   };
 
+  const handleTypingIndicator = async (value: string, flag: boolean) => {
+    // if (value.length >)
+    console.log("Typingg...", flag, value);
+    // if (flag) {
+    ws.send(
+      JSON.stringify({
+        type: "typing",
+        payload: {
+          conversationId: focusedConversation?.id,
+          username: localStorage.getItem("currentUser"),
+          indicatorFlag: flag,
+        },
+      }),
+    );
+    // }
+  };
+
   useEffect(() => {
-    cursorRef.current = cursorId;
+    let conversationId = focusedConversation?.id! as string;
+    if (!cursorId) return;
+    cursorRef.current[conversationId] = cursorId;
   }, [cursorId]);
 
   //responsible for the auto scroll of the caht section to bottom postion for new messages
@@ -97,7 +121,7 @@ const ChatSection = () => {
     const el = scrollRef.current;
 
     if (!el) return;
-    // console.log("messages", messages);
+    // console.log("istypingFLag", isTypingFlag);
     requestAnimationFrame(() => {
       const isNearBottom =
         el.scrollHeight - el.scrollTop - el.clientHeight < 100;
@@ -108,27 +132,30 @@ const ChatSection = () => {
           behavior: "smooth",
         });
     });
-  }, [messages]);
+  }, [messages, isTypingFlag]);
 
   useEffect(() => {
     setIsloading(false);
     setMessages([]);
     setCursorId(null);
-    // const el = scrollRef.current;
-    // if (!el) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    (async () => {
+      await getConversationMessages();
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: "smooth",
+      });
+    })();
+  }, [focusedConversation?.id]);
 
-    getConversationMessages();
-
-    // el.scrollTo({
-    //   top: el.scrollHeight,
-    //   behavior: "smooth",
-    // });
+  useEffect(() => {
     if (!ws) return;
 
-    const handleSocketMessage = (event: MessageEvent) => {
-      console.log("message recived", event.data);
-      const data = JSON.parse(event.data);
+    // Responsible for Incoming adding message from socket server
+    const handleAddMessage = (data: any) => {
       if (data.conversationId !== focusedConversation?.id) return;
+
       const tempMessage = {
         id: Date.now().toString(),
         content: data.content,
@@ -137,12 +164,37 @@ const ChatSection = () => {
       };
       setMessages((prev) => [...prev, tempMessage]);
     };
+
+    // responsible for adding incoming typing indicator in chat secton
+    const handleAddTypingIndicator = (data: {
+      conversationId: string;
+      username: string;
+      indicatorFlag: boolean;
+    }) => {
+      // console.log("incoming typing mssg", data);
+      if (focusedConversation?.id === data.conversationId)
+        setIsTypingFlag(data.indicatorFlag);
+    };
+
+    const handleSocketMessage = (event: MessageEvent) => {
+      console.log("message recived", event.data);
+      let data = JSON.parse(event.data);
+
+      switch (data.type) {
+        case "message":
+          handleAddMessage(data.payload);
+          break;
+        case "typing":
+          handleAddTypingIndicator(data.payload);
+          break;
+      }
+    };
     ws.addEventListener("message", handleSocketMessage);
 
     return () => {
       ws.removeEventListener("message", handleSocketMessage);
     };
-  }, [focusedConversation?.id]);
+  }, [ws]);
 
   return (
     <>
@@ -160,7 +212,13 @@ const ChatSection = () => {
       >
         <h2>{focusedConversation?.username}</h2>
         <hr />
-        <button style={{ margin: "auto", display: "block", cursor: "pointer" }}>
+        <button
+          style={{ margin: "auto", display: "block", cursor: "pointer" }}
+          onClick={() => {
+            LoadMoreRef.current = true;
+            getConversationMessages();
+          }}
+        >
           Load older mssges.
         </button>
         <div
@@ -218,6 +276,13 @@ const ChatSection = () => {
                 : "Start The Conversation."
               : "Loading ..."}
             {/* {JSON.stringify(messages)} */}
+            {isTypingFlag ? (
+              <span style={{ fontSize: "1.2rem", fontWeight: "bolder" }}>
+                typing...
+              </span>
+            ) : (
+              ""
+            )}
           </div>
 
           <form
@@ -246,7 +311,12 @@ const ChatSection = () => {
               style={{ flex: "1", fontSize: "1.2rem" }}
               placeholder="Write Something..."
               value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
+              onChange={(e) => {
+                setChatInput(e.target.value);
+                handleTypingIndicator(e.target.value, true);
+              }}
+              // onFocus={(e) => handleTypingIndicator(e.target.value, true)}
+              onBlur={() => handleTypingIndicator("", false)}
             />
             <button style={{ width: "50px" }}>send</button>
           </form>

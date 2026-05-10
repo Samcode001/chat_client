@@ -41,6 +41,7 @@ const SideBar = () => {
               payload: {
                 conversationId: conversation.id,
                 username: localStorage.getItem("currentUser"),
+                token: localStorage.getItem("token"),
               },
             }),
           );
@@ -55,6 +56,7 @@ const SideBar = () => {
   const handleSelectConversation = async (conversation: Conversation) => {
     dispatch(setFocusedConversation(conversation));
   };
+
   useEffect(() => {
     if (!ws) return;
 
@@ -68,22 +70,59 @@ const SideBar = () => {
       console.log("error on socket", error);
     };
 
-    const handleSocketMessage = (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
-      console.log("sidebar ws data", data, conversations);
+    // responsible for adding the lastmessage get from socket server in sidebar
+    const handleAddMessage = (data: any) => {
       const conversationId = data.conversationId;
       dispatch(
-        updateConversation({ id: conversationId, lastMessage: data.content }),
+        updateConversation({
+          type: "messageUpdate",
+          payload: { id: conversationId, lastMessage: data.content },
+        }),
       );
+    };
+    // responsilbe for adding typing incator from socket server in  sidebar
+    const handleAddTypingIndicator = (data: {
+      conversationId: string;
+      username: string;
+      indicatorFlag: boolean;
+    }) => {
+      // console.log(data);
+      dispatch(
+        updateConversation({
+          type: "typingIndicatorUpdate",
+          payload: {
+            id: data.conversationId,
+            indicatorFlag: data.indicatorFlag,
+          },
+        }),
+      );
+    };
+
+    const handleSocketMessage = (event: MessageEvent) => {
+      let data = JSON.parse(event.data);
+
+      switch (data.type) {
+        case "message":
+          handleAddMessage(data.payload);
+          break;
+        case "typing":
+          handleAddTypingIndicator(data.payload);
+      }
+    };
+
+    const handleConnectionClose = () => {
+      console.log("close called");
     };
     ws.addEventListener("message", handleSocketMessage);
     ws.addEventListener("open", handleConnectionOpen);
     ws.addEventListener("error", handleSocketError);
+    ws.addEventListener("close", handleConnectionClose);
 
     return () => {
       ws.removeEventListener("message", handleSocketMessage);
       ws.removeEventListener("open", handleConnectionOpen);
       ws.removeEventListener("error", handleSocketError);
+      ws.removeEventListener("close", handleConnectionClose);
     };
   }, [ws]);
 
@@ -158,9 +197,11 @@ const SideBar = () => {
                       <div style={{ display: "flex", fontSize: "0.9rem" }}>
                         {/* <span>{conversation.sender}</span> : */}
                         <span>
-                          {conversation.lastMessage
-                            ? conversation.lastMessage
-                            : ""}
+                          {conversation.isTyping
+                            ? "typing..."
+                            : conversation.lastMessage
+                              ? conversation.lastMessage
+                              : ""}
                         </span>
                       </div>
                     </div>

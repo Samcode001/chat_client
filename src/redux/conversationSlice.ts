@@ -33,16 +33,27 @@ export const conversationSlice = createSlice({
       state.focusedConversation = action.payload;
     },
     updateConversation: (state, action: PayloadAction<any>) => {
-      const index = state.conversations.findIndex(
-        (conversation) => conversation.id === action.payload.id,
-      );
-      // console.log(action.payload, state.conversations[index]);
+      const { type, payload } = action.payload;
 
-      state.conversations[index].lastMessage = action.payload.lastMessage;
+      if (type === "messageUpdate") {
+        const index = state.conversations.findIndex(
+          (conversation) => conversation.id === payload.id,
+        );
+        // console.log(payload, state.conversations[index]);
 
-      let temp = state.conversations[index];
-      state.conversations[index] = state.conversations[0];
-      state.conversations[0] = temp;
+        state.conversations[index].lastMessage = payload.lastMessage;
+
+        let temp = state.conversations[index];
+        state.conversations[index] = state.conversations[0];
+        state.conversations[0] = temp;
+      }
+
+      if (type === "typingIndicatorUpdate") {
+        const index = state.conversations.findIndex(
+          (elem) => elem.id === payload.id,
+        );
+        state.conversations[index].isTyping = payload.indicatorFlag;
+      }
     },
   },
 });

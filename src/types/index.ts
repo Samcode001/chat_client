@@ -13,6 +13,7 @@ export interface Conversation {
   username: string;
   lastMessage: string | null;
   updatedAt: string;
+  isTyping?:boolean
 }
 // interface MemberUser {
 //   id: string;
@@ -34,4 +35,8 @@ export interface Message {
   //   sender: {
   // id: string;
   //   };
+}
+
+export interface Cursor {
+  [key: string]: string;
 }
