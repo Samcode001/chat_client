@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Conversation } from "../types";
 import { useDispatch, useSelector } from "react-redux";
@@ -9,14 +9,16 @@ import {
 } from "../redux/conversationSlice";
 import type { RootState } from "../redux/store";
 import { api } from "../lib/axios";
-import ws from "../lib/socketInitiator";
+import { socketManager } from "../lib/socketInitiator";
+// import ws from "../lib/socketInitiator";
 
 const SideBar = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  const ws = socketManager.getSocket();
+
   const [isLoading, setIsLoading] = useState(false);
-  const isJoinedRef = useRef<boolean>(false);
 
   const conversations = useSelector(
     (state: RootState) => state.conversation.conversations,
@@ -27,27 +29,22 @@ const SideBar = () => {
       const { data } = await api.get(`/chat/conversations`);
 
       console.log(data);
+
       if (!data) return;
       let conversations = data.conversations;
       setIsLoading(true);
       dispatch(setConversations(conversations));
 
-      if (isJoinedRef.current) return;
       conversations.map((conversation: Conversation) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(
-            JSON.stringify({
-              type: "join",
-              payload: {
-                conversationId: conversation.id,
-                username: localStorage.getItem("currentUser"),
-                token: localStorage.getItem("token"),
-              },
-            }),
-          );
-        }
+        socketManager.sendMessage({
+          type: "join",
+          payload: {
+            conversationId: conversation.id,
+            username: localStorage.getItem("currentUser")!,
+            token: localStorage.getItem("token")!,
+          },
+        });
       });
-      isJoinedRef.current = true;
     } catch (error) {
       console.log(error);
     }
@@ -62,13 +59,13 @@ const SideBar = () => {
 
     console.log("conversations", conversations);
 
-    const handleConnectionOpen = () => {
-      console.log("connected to socket server");
-    };
+    // const handleConnectionOpen = () => {
+    //   console.log("connected to socket server");
+    // };
 
-    const handleSocketError = (error: any) => {
-      console.log("error on socket", error);
-    };
+    // const handleSocketError = (error: any) => {
+    //   console.log("error on socket", error);
+    // };
 
     // responsible for adding the lastmessage get from socket server in sidebar
     const handleAddMessage = (data: any) => {
@@ -110,21 +107,22 @@ const SideBar = () => {
       }
     };
 
-    const handleConnectionClose = () => {
-      console.log("close called");
-    };
+    // const handleConnectionClose = () => {
+    //   console.log("close called");
+    //   // ConnectSocket();
+    // };
     ws.addEventListener("message", handleSocketMessage);
-    ws.addEventListener("open", handleConnectionOpen);
-    ws.addEventListener("error", handleSocketError);
-    ws.addEventListener("close", handleConnectionClose);
+    // ws.addEventListener("open", handleConnectionOpen);
+    // ws.addEventListener("error", handleSocketError);
+    // ws.addEventListener("close", handleConnectionClose);
 
     return () => {
       ws.removeEventListener("message", handleSocketMessage);
-      ws.removeEventListener("open", handleConnectionOpen);
-      ws.removeEventListener("error", handleSocketError);
-      ws.removeEventListener("close", handleConnectionClose);
+      // ws.removeEventListener("open", handleConnectionOpen);
+      // ws.removeEventListener("error", handleSocketError);
+      // ws.removeEventListener("close", handleConnectionClose);
     };
-  }, [ws]);
+  }, []);
 
   useEffect(() => {
     getConversations();

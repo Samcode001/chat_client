@@ -3,8 +3,9 @@ import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "../redux/store";
 import type { Cursor, Message } from "../types";
 import { api } from "../lib/axios";
-import ws from "../lib/socketInitiator";
+// import ws from "../lib/socketInitiator";
 import { updateConversation } from "../redux/conversationSlice";
+import { socketManager } from "../lib/socketInitiator";
 
 const ChatSection = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -16,8 +17,11 @@ const ChatSection = () => {
   const cursorRef = useRef<Cursor>({});
   const LoadMoreRef = useRef<boolean>(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const typingDebounceTimer = useRef<number>(NaN);
 
   const dispatch = useDispatch();
+
+  const ws = socketManager.getSocket();
 
   const focusedConversation = useSelector(
     (state: RootState) => state.conversation.focusedConversation,
@@ -26,8 +30,11 @@ const ChatSection = () => {
   const handleSubmit = async (e: any) => {
     try {
       e.preventDefault();
+
+      // this is called Optimistic Update
+      const tempId = `temp-${Date.now().toString()}`;
       const tempMessage: Message = {
-        id: Date.now().toString(),
+        id: tempId,
         content: chatInput,
         username: localStorage.getItem("currentUser")!,
         createdAt: Date.now().toString(),
@@ -42,17 +49,15 @@ const ChatSection = () => {
           },
         }),
       );
-      ws.send(
-        JSON.stringify({
-          type: "message",
-          payload: {
-            content: chatInput,
-            conversationId: focusedConversation?.id,
-          },
-        }),
-      );
 
-      // console.log(data);
+      socketManager.sendMessage({
+        type: "message",
+        payload: {
+          tempMessageId: tempId,
+          content: chatInput,
+          conversationId: focusedConversation?.id!,
+        },
+      });
 
       setChatInput("");
     } catch (error) {
@@ -93,21 +98,15 @@ const ChatSection = () => {
     }
   };
 
-  const handleTypingIndicator = async (value: string, flag: boolean) => {
-    // if (value.length >)
-    console.log("Typingg...", flag, value);
-    // if (flag) {
-    ws.send(
-      JSON.stringify({
-        type: "typing",
-        payload: {
-          conversationId: focusedConversation?.id,
-          username: localStorage.getItem("currentUser"),
-          indicatorFlag: flag,
-        },
-      }),
-    );
-    // }
+  const handleTypingIndicator = async (flag: boolean) => {
+    socketManager.sendMessage({
+      type: "typing",
+      payload: {
+        conversationId: focusedConversation?.id!,
+        username: localStorage.getItem("currentUser")!,
+        indicatorFlag: flag,
+      },
+    });
   };
 
   useEffect(() => {
@@ -116,7 +115,7 @@ const ChatSection = () => {
     cursorRef.current[conversationId] = cursorId;
   }, [cursorId]);
 
-  //responsible for the auto scroll of the caht section to bottom postion for new messages
+  //responsible for the auto scroll of the chat section to bottom postion for new messages
   useEffect(() => {
     const el = scrollRef.current;
 
@@ -153,16 +152,32 @@ const ChatSection = () => {
     if (!ws) return;
 
     // Responsible for Incoming adding message from socket server
-    const handleAddMessage = (data: any) => {
+    const handleAddMessage = (data: {
+      conversationId: string;
+      tempMessageId: string;
+      id: string;
+      content: string;
+      username: string;
+      createdAt: string;
+    }) => {
       if (data.conversationId !== focusedConversation?.id) return;
 
-      const tempMessage = {
-        id: Date.now().toString(),
+      const backendResponseMessage = {
+        id: data.id,
         content: data.content,
         username: data.username,
         createdAt: Date.now().toString(),
       };
-      setMessages((prev) => [...prev, tempMessage]);
+      setMessages((prev) => {
+        let copy = [...prev];
+        let tempIndex = copy.findIndex(
+          (elem) => elem.id === data.tempMessageId,
+        );
+
+        if (tempIndex !== -1) copy.splice(tempIndex, 1);
+
+        return [...copy, backendResponseMessage];
+      });
     };
 
     // responsible for adding incoming typing indicator in chat secton
@@ -193,8 +208,9 @@ const ChatSection = () => {
 
     return () => {
       ws.removeEventListener("message", handleSocketMessage);
+      clearTimeout(typingDebounceTimer.current);
     };
-  }, [ws]);
+  }, []);
 
   return (
     <>
@@ -311,12 +327,17 @@ const ChatSection = () => {
               style={{ flex: "1", fontSize: "1.2rem" }}
               placeholder="Write Something..."
               value={chatInput}
+              // The Debouncing method for the typing event
               onChange={(e) => {
                 setChatInput(e.target.value);
-                handleTypingIndicator(e.target.value, true);
+                handleTypingIndicator(true);
+
+                clearTimeout(typingDebounceTimer.current);
+
+                typingDebounceTimer.current = setTimeout(() => {
+                  handleTypingIndicator(false);
+                }, 1500);
               }}
-              // onFocus={(e) => handleTypingIndicator(e.target.value, true)}
-              onBlur={() => handleTypingIndicator("", false)}
             />
             <button style={{ width: "50px" }}>send</button>
           </form>
