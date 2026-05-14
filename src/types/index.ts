@@ -13,7 +13,7 @@ export interface Conversation {
   username: string;
   lastMessage: string | null;
   updatedAt: string;
-  isTyping?:boolean
+  isTyping?: boolean;
 }
 // interface MemberUser {
 //   id: string;
@@ -32,6 +32,8 @@ export interface Message {
   //   updatedAt: string;
   //   userId: string;
   username: string;
+  status: string;
+  seen: boolean;
   //   sender: {
   // id: string;
   //   };

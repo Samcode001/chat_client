@@ -13,6 +13,7 @@ const ChatSection = () => {
   const [isLoading, setIsloading] = useState(false);
   const [cursorId, setCursorId] = useState(null);
   const [isTypingFlag, setIsTypingFlag] = useState(false);
+  // const [isMessageSentFlag, setIsMessageSentFlag] = useState(false);
 
   const cursorRef = useRef<Cursor>({});
   const LoadMoreRef = useRef<boolean>(false);
@@ -38,6 +39,8 @@ const ChatSection = () => {
         content: chatInput,
         username: localStorage.getItem("currentUser")!,
         createdAt: Date.now().toString(),
+        status: "sending",
+        seen: false,
       };
       setMessages((prev) => [...prev, tempMessage]);
       dispatch(
@@ -159,6 +162,8 @@ const ChatSection = () => {
       content: string;
       username: string;
       createdAt: string;
+      status: string;
+      seen: boolean;
     }) => {
       if (data.conversationId !== focusedConversation?.id) return;
 
@@ -167,6 +172,8 @@ const ChatSection = () => {
         content: data.content,
         username: data.username,
         createdAt: Date.now().toString(),
+        status: data.status,
+        seen: data.seen,
       };
       setMessages((prev) => {
         let copy = [...prev];
@@ -177,6 +184,31 @@ const ChatSection = () => {
         if (tempIndex !== -1) copy.splice(tempIndex, 1);
 
         return [...copy, backendResponseMessage];
+      });
+      if (localStorage.getItem("currentUser") !== data.username)
+        socketManager.sendMessage({
+          type: "delivered",
+          payload: {
+            messageId: data.id,
+            username: data.username,
+            conversationId: data.conversationId,
+          },
+        });
+      // setIsMessageSentFlag(true);
+    };
+
+    const handleAddDeliveredStatus = (data: {
+      messageId: string;
+      status: string;
+    }) => {
+      setMessages((prev) => {
+        const cloned = [...prev];
+
+        let updateMessageIndex = cloned.findIndex(
+          (elem) => elem.id === data.messageId,
+        );
+        cloned[updateMessageIndex].status = data.status;
+        return cloned;
       });
     };
 
@@ -202,6 +234,8 @@ const ChatSection = () => {
         case "typing":
           handleAddTypingIndicator(data.payload);
           break;
+        case "delivered":
+          handleAddDeliveredStatus(data.payload);
       }
     };
     ws.addEventListener("message", handleSocketMessage);
@@ -274,18 +308,45 @@ const ChatSection = () => {
                       >
                         <span
                           style={{
-                            fontSize: "0.8rem",
+                            fontSize: "1rem",
                             display: "block",
                             textDecoration: "underline",
                             marginBottom: "4px",
                             color: "gray",
                           }}
                         >
-                          {message.username}
+                          {/* {message.username} */}
                         </span>
                         <span style={{ fontSize: "1.2rem" }}>
                           {message.content}
                         </span>
+                        {message.username ===
+                        localStorage.getItem("currentUser") ? (
+                          <span
+                            style={
+                              message.seen
+                                ? {
+                                    fontSize: "0.7rem",
+                                    color: "blue",
+                                    paddingLeft: "2px",
+                                  }
+                                : {
+                                    fontSize: "0.7rem",
+                                    color: "gray",
+                                    paddingLeft: "2px",
+                                  }
+                            }
+                          >
+                            {message.status === "sent" ? <span> ✓</span> : ""}
+                            {message.status === "delivered" ? (
+                              <span> ✓✓</span>
+                            ) : (
+                              ""
+                            )}
+                          </span>
+                        ) : (
+                          ""
+                        )}
                       </div>
                     );
                   })

@@ -34,17 +34,10 @@ const SideBar = () => {
       let conversations = data.conversations;
       setIsLoading(true);
       dispatch(setConversations(conversations));
-
-      conversations.map((conversation: Conversation) => {
-        socketManager.sendMessage({
-          type: "join",
-          payload: {
-            conversationId: conversation.id,
-            username: localStorage.getItem("currentUser")!,
-            token: localStorage.getItem("token")!,
-          },
-        });
-      });
+      let conversationIds = conversations.map(
+        (conversation: Conversation) => conversation.id,
+      );
+      socketManager.joinAllConversations(conversationIds);
     } catch (error) {
       console.log(error);
     }

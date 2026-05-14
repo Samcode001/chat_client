@@ -2,6 +2,7 @@ class SocketManager {
   private socket: WebSocket | null = null;
   private reconnectTimer: number | null = null;
   private reconnectCalls: number = 1;
+  private ConversationsToConnect: string[] = [];
 
   connect() {
     if (
@@ -15,7 +16,8 @@ class SocketManager {
 
     this.socket.onopen = () => {
       console.log("SOCKET CONNECTED");
-
+      this.joinAllConversations([]);
+      this.reconnectCalls = 1;
       if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
@@ -24,7 +26,6 @@ class SocketManager {
 
     this.socket.onclose = () => {
       console.log("Socket DIsconnected");
-      this.socket?.close();
       if (this.reconnectCalls > 16) return;
       this.reconnectTimer = setTimeout(() => {
         console.log("Socket Reconnecting...");
@@ -43,6 +44,23 @@ class SocketManager {
   getSocket() {
     if (!this.socket) this.connect();
     return this.socket;
+  }
+
+  joinAllConversations(data: string[]) {
+    if (data.length > 0) this.ConversationsToConnect = data;
+
+    this.ConversationsToConnect.map((conversationId) => {
+      this.socket?.send(
+        JSON.stringify({
+          type: "join",
+          payload: {
+            conversationId: conversationId,
+            username: localStorage.getItem("currentUser")!,
+            token: localStorage.getItem("token")!,
+          },
+        }),
+      );
+    });
   }
 
   sendMessage(data: SendMessage) {
@@ -66,6 +84,10 @@ type SendMessage = // Discriminated union
   | {
       type: "typing";
       payload: TypingPayload;
+    }
+  | {
+      type: "delivered";
+      payload: DeliveredPayload;
     };
 
 interface MessagePayload {
@@ -84,4 +106,10 @@ interface JoinPayload {
   conversationId: string;
   username: string;
   token: string;
+}
+
+interface DeliveredPayload {
+  messageId: string;
+  username: string;
+  conversationId: string;
 }
