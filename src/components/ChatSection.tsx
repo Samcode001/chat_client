@@ -19,6 +19,7 @@ const ChatSection = () => {
   const LoadMoreRef = useRef<boolean>(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const typingDebounceTimer = useRef<number>(NaN);
+  const typingTimer = useRef<number>(NaN);
 
   const dispatch = useDispatch();
 
@@ -102,6 +103,8 @@ const ChatSection = () => {
   };
 
   const handleTypingIndicator = async (flag: boolean) => {
+    if (flag) {
+    }
     socketManager.sendMessage({
       type: "typing",
       payload: {
@@ -391,13 +394,16 @@ const ChatSection = () => {
               // The Debouncing method for the typing event
               onChange={(e) => {
                 setChatInput(e.target.value);
-                handleTypingIndicator(true);
+                // handleTypingIndicator(true);
 
                 clearTimeout(typingDebounceTimer.current);
-
+                clearTimeout(typingTimer.current);
+                typingTimer.current = setTimeout(() => {
+                  handleTypingIndicator(true);
+                }, 1500);
                 typingDebounceTimer.current = setTimeout(() => {
                   handleTypingIndicator(false);
-                }, 1500);
+                }, 3500);
               }}
             />
             <button style={{ width: "50px" }}>send</button>

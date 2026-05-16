@@ -12,7 +12,9 @@ class SocketManager {
     )
       return this.socket;
 
-    this.socket = new WebSocket("ws://localhost:8080");
+    this.socket = new WebSocket(
+      `ws://localhost:8080?token=${localStorage.getItem("token")}`,
+    );
 
     this.socket.onopen = () => {
       console.log("SOCKET CONNECTED");
@@ -56,7 +58,6 @@ class SocketManager {
           payload: {
             conversationId: conversationId,
             username: localStorage.getItem("currentUser")!,
-            token: localStorage.getItem("token")!,
           },
         }),
       );
