@@ -16,8 +16,6 @@ const SideBar = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const ws = socketManager.getSocket();
-
   const [isLoading, setIsLoading] = useState(false);
 
   const conversations = useSelector(
@@ -48,8 +46,6 @@ const SideBar = () => {
   };
 
   useEffect(() => {
-    if (!ws) return;
-
     console.log("conversations", conversations);
 
     // const handleConnectionOpen = () => {
@@ -88,32 +84,32 @@ const SideBar = () => {
       );
     };
 
-    const handleSocketMessage = (event: MessageEvent) => {
-      let data = JSON.parse(event.data);
+    // const handleSocketMessage = (data: any) => {
+    //   // let data = JSON.parse(event.data);
 
-      switch (data.type) {
-        case "message":
-          handleAddMessage(data.payload);
-          break;
-        case "typing":
-          handleAddTypingIndicator(data.payload);
-      }
-    };
-
-    // const handleConnectionClose = () => {
-    //   console.log("close called");
-    //   // ConnectSocket();
+    //   switch (data.type) {
+    //     case "message":
+    //       handleAddMessage(data.payload);
+    //       break;
+    //     case "typing":
+    //       handleAddTypingIndicator(data.payload);
+    //   }
     // };
-    ws.addEventListener("message", handleSocketMessage);
+
+    // ws.addEventListener("message", handleSocketMessage);
+    socketManager.subscribe("message", handleAddMessage);
+    socketManager.subscribe("typing", handleAddTypingIndicator);
     // ws.addEventListener("open", handleConnectionOpen);
     // ws.addEventListener("error", handleSocketError);
     // ws.addEventListener("close", handleConnectionClose);
 
     return () => {
-      ws.removeEventListener("message", handleSocketMessage);
+      // ws.removeEventListener("message", handleSocketMessage);
       // ws.removeEventListener("open", handleConnectionOpen);
       // ws.removeEventListener("error", handleSocketError);
       // ws.removeEventListener("close", handleConnectionClose);
+      socketManager.unsubscribe("message", handleAddMessage);
+      socketManager.unsubscribe("typing", handleAddTypingIndicator);
     };
   }, []);
 

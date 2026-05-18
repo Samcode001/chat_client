@@ -19,11 +19,9 @@ const ChatSection = () => {
   const LoadMoreRef = useRef<boolean>(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const typingDebounceTimer = useRef<number>(NaN);
-  const typingTimer = useRef<number>(NaN);
+  const typingTimer = useRef<boolean>(false);
 
   const dispatch = useDispatch();
-
-  const ws = socketManager.getSocket();
 
   const focusedConversation = useSelector(
     (state: RootState) => state.conversation.focusedConversation,
@@ -126,7 +124,7 @@ const ChatSection = () => {
     const el = scrollRef.current;
 
     if (!el) return;
-    // console.log("istypingFLag", isTypingFlag);
+    // console.log("messages", messages);
     requestAnimationFrame(() => {
       const isNearBottom =
         el.scrollHeight - el.scrollTop - el.clientHeight < 100;
@@ -155,8 +153,6 @@ const ChatSection = () => {
   }, [focusedConversation?.id]);
 
   useEffect(() => {
-    if (!ws) return;
-
     // Responsible for Incoming adding message from socket server
     const handleAddMessage = (data: {
       conversationId: string;
@@ -174,7 +170,7 @@ const ChatSection = () => {
         id: data.id,
         content: data.content,
         username: data.username,
-        createdAt: Date.now().toString(),
+        createdAt: data.createdAt,
         status: data.status,
         seen: data.seen,
       };
@@ -210,6 +206,7 @@ const ChatSection = () => {
         let updateMessageIndex = cloned.findIndex(
           (elem) => elem.id === data.messageId,
         );
+        if (updateMessageIndex === -1) return cloned;
         cloned[updateMessageIndex].status = data.status;
         return cloned;
       });
@@ -226,25 +223,31 @@ const ChatSection = () => {
         setIsTypingFlag(data.indicatorFlag);
     };
 
-    const handleSocketMessage = (event: MessageEvent) => {
-      console.log("message recived", event.data);
-      let data = JSON.parse(event.data);
+    socketManager.subscribe("message", handleAddMessage);
+    socketManager.subscribe("typing", handleAddTypingIndicator);
+    socketManager.subscribe("delivered", handleAddDeliveredStatus);
+    // const handleSocketMessage = (event: MessageEvent) => {
+    //   console.log("message recived", event.data);
+    //   let data = JSON.parse(event.data);
 
-      switch (data.type) {
-        case "message":
-          handleAddMessage(data.payload);
-          break;
-        case "typing":
-          handleAddTypingIndicator(data.payload);
-          break;
-        case "delivered":
-          handleAddDeliveredStatus(data.payload);
-      }
-    };
-    ws.addEventListener("message", handleSocketMessage);
+    //   switch (data.type) {
+    //     case "message":
+    //       handleAddMessage(data.payload);
+    //       break;
+    //     case "typing":
+    //       handleAddTypingIndicator(data.payload);
+    //       break;
+    //     case "delivered":
+    //       handleAddDeliveredStatus(data.payload);
+    //   }
+    // };
+    // ws.addEventListener("message", handleSocketMessage);
 
     return () => {
-      ws.removeEventListener("message", handleSocketMessage);
+      // ws.removeEventListener("message", handleSocketMessage);
+      socketManager.unsubscribe("message", handleAddMessage);
+      socketManager.unsubscribe("typing", handleAddTypingIndicator);
+      socketManager.unsubscribe("delivered", handleAddDeliveredStatus);
       clearTimeout(typingDebounceTimer.current);
     };
   }, []);
@@ -394,16 +397,19 @@ const ChatSection = () => {
               // The Debouncing method for the typing event
               onChange={(e) => {
                 setChatInput(e.target.value);
-                // handleTypingIndicator(true);
+
+                // for typing throttling
+                if (!typingTimer.current) {
+                  handleTypingIndicator(true);
+                  typingTimer.current = true;
+                }
 
                 clearTimeout(typingDebounceTimer.current);
-                clearTimeout(typingTimer.current);
-                typingTimer.current = setTimeout(() => {
-                  handleTypingIndicator(true);
-                }, 1500);
+
                 typingDebounceTimer.current = setTimeout(() => {
                   handleTypingIndicator(false);
-                }, 3500);
+                  typingTimer.current = false;
+                }, 2000);
               }}
             />
             <button style={{ width: "50px" }}>send</button>

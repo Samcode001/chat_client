@@ -3,6 +3,7 @@ class SocketManager {
   private reconnectTimer: number | null = null;
   private reconnectCalls: number = 1;
   private ConversationsToConnect: string[] = [];
+  private subscriptionMap = new Map<string, Set<Function>>(); // A Centralized Event Bus
 
   connect() {
     if (
@@ -40,6 +41,26 @@ class SocketManager {
       console.log(`Error On Socket ${err}`);
     };
 
+    this.socket.onmessage = (event: any) => {
+      // this.subscriptionMap.forEach(subscriber=>{
+      //     const {event,listeners}=subscriber
+      // })
+      const data = JSON.parse(event.data);
+      const { type, payload } = data;
+      //   console.log(
+      //     "Onmessage event called",
+      //     type,
+      //     payload,
+      //     event.data,
+      //     // listener,
+      //   );
+      for (const [event, listener] of this.subscriptionMap) {
+        if (type === event) {
+          listener.forEach((cb) => cb(payload));
+        }
+      }
+    };
+
     return this.socket;
   }
 
@@ -68,6 +89,21 @@ class SocketManager {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(data));
     }
+  }
+
+  subscribe(type: any, callback: any) {
+    if (!this.subscriptionMap.has(type))
+      this.subscriptionMap.set(type, new Set());
+    const listener = this.subscriptionMap.get(type);
+    if (!listener) return;
+    listener.add(callback);
+
+    // this.subscriptionMap=
+  }
+
+  unsubscribe(type: any, callback: any) {
+    const subscription = this.subscriptionMap.get(type);
+    subscription?.delete(callback);
   }
 }
 
